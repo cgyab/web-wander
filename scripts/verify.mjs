@@ -29,7 +29,8 @@ async function waitSnap(page) {
 
 const browser = await puppeteer.launch({
   executablePath: CHROME,
-  headless: "new",
+  headless: true, // Chrome's "new" headless is the default from puppeteer 22+; the "new" string is gone in 24+
+
   args: ["--no-sandbox", "--use-gl=swiftshader", "--enable-webgl", "--window-size=960,540"],
 });
 

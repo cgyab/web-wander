@@ -6,7 +6,8 @@ import { readFileSync, writeFileSync } from "node:fs";
 const svg = readFileSync(new URL("../public/favicon.svg", import.meta.url), "utf8");
 const browser = await puppeteer.launch({
   executablePath: "/usr/bin/google-chrome",
-  headless: "new",
+  headless: true, // "new" headless is the default from puppeteer 22+; the "new" string is gone in 24+
+
   args: ["--no-sandbox", "--force-device-scale-factor=1"],
 });
 try {
