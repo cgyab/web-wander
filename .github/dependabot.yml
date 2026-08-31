@@ -6,6 +6,12 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    ignore:
+      # Vite 8+ switched to the rolldown bundler, whose native binding fails to
+      # install on common npm versions (npm optional-deps bug). Stay on the
+      # stable Rollup-based line; revisit majors manually.
+      - dependency-name: "vite"
+        update-types: ["version-update:semver-major"]
 
   # Rust simulation crate.
   - package-ecosystem: "cargo"
