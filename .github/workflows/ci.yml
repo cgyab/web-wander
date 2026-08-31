@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: build + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Rust stable + cargo are preinstalled on the runner; just add the wasm
+      # target the build needs. (No third-party toolchain action.)
+      - name: Add wasm32 target
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Rust unit tests
+        run: cargo test --lib --locked
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install JS deps
+        run: npm ci
+
+      # Runs the wasm build (prebuild -> build-wasm.sh), tsc --noEmit typecheck,
+      # and the vite production bundle.
+      - name: Build (wasm + typecheck + bundle)
+        run: npm run build
+
+# Note: the headless-Chrome e2e (scripts/verify.mjs) is intentionally not part of
+# this badge job — a few of its checks (celebration, fishing cast timing) are
+# CPU-load sensitive and flake on shared runners. Run it locally against a preview
+# server. The build+test job above is fully deterministic.

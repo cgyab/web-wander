@@ -1,5 +1,8 @@
 # WebWander — a "Walking Around" game
 
+[![CI](https://github.com/cgyab/web-wander/actions/workflows/ci.yml/badge.svg)](https://github.com/cgyab/web-wander/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 An infinite, procedurally generated top-down 8‑bit action‑RPG that runs in the
 browser. The whole point is **distance**: how far from the origin `(0,0)` can you
 get? It's tuned so a million tiles is a legendary, ~sub-200-hour frontier. The deterministic simulation is a tiny Rust module compiled to raw
