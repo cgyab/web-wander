@@ -1,0 +1,4 @@
+node_modules/
+dist/
+target/
+public/game.wasm

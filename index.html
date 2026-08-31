@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Defense-in-depth CSP. The app is fully self-contained (no CDN, no external
+         hosts), so everything is 'self'. 'wasm-unsafe-eval' is REQUIRED for the
+         WebAssembly module to compile; without it the game won't load. style-src
+         allows inline styles (a few style="" attributes / el.style); tighten later
+         if those are removed. frame-ancestors here is a no-op in a meta tag — set
+         it (or X-Frame-Options) as a server header for clickjacking protection. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <!-- iOS: launch full-screen from the Home Screen (removes Safari chrome and
+         its edge-swipe / pull-to-refresh gestures). Ignored by Android, which
+         uses the web manifest's display:standalone instead. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <title>WebWander — a "Walking Around" game</title>
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png" />
+    <link rel="apple-touch-icon" href="./icon-192.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta name="theme-color" content="#0a0a12" />
+    <meta name="description" content="An infinite procedural 8-bit wilderness. How far can you walk?" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <canvas id="screen"></canvas>
+    <div id="hud"></div>
+    <div id="activeitem"></div>
+    <div id="inventory" class="hidden"></div>
+    <div id="celebrate" class="hidden"></div>
+    <div id="hint">WASD move &middot; Mouse aim &middot; Click attack &middot; 1-4 weapons &middot; I inventory &middot; F fish (at water) &middot; Esc menu &middot; H hud &middot; M mute</div>
+    <div id="menu" class="hidden"></div>
+    <div id="help" class="hidden"></div>
+    <div id="confirm" class="hidden"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

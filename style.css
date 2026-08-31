@@ -1,0 +1,623 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background: #0a0a12;
+  overflow: hidden;
+  font-family: "Courier New", monospace;
+  color: #e8e8f0;
+  cursor: crosshair;
+  /* Touch hardening (chiefly for iOS/Safari; benign on Android/Chrome).
+     touch-action combines by intersection up the tree, so `manipulation` here
+     disables double-tap-to-zoom and the 300ms tap delay for every descendant
+     while STILL allowing the menu to pan-scroll — the canvas and joystick pad
+     each set `touch-action: none` to opt out of gestures entirely. It never
+     eats a legitimate rapid double-tap the way a JS timing hack would. */
+  touch-action: manipulation;
+  overscroll-behavior: none;            /* no rubber-band / pull-to-refresh chaining */
+  -webkit-user-select: none;            /* no long-press text selection */
+  -moz-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;          /* no long-press callout (Safari) */
+  -webkit-tap-highlight-color: transparent; /* no grey tap flash (iOS) */
+}
+
+#screen {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  touch-action: none; /* the play surface never scrolls, zooms, or double-taps */
+}
+
+#hud {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  text-shadow: 1px 1px 0 #000;
+  pointer-events: none;
+  white-space: pre;
+}
+/* The message line wraps within a capped width so long respawn notes aren't
+   clipped off the right edge (the rest of the HUD stays pre-formatted). */
+#hud .hudmsg {
+  display: inline-block;
+  white-space: normal;
+  max-width: min(52ch, 78vw);
+  color: #ffd86b;
+}
+
+#activeitem {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  min-width: 128px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(10, 10, 20, 0.82);
+  border: 2px solid #4a4a70;
+  box-shadow: 0 0 0 2px #0a0a12;
+  padding: 6px 10px;
+  font-size: 12px;
+  text-shadow: 1px 1px 0 #000;
+  pointer-events: none;
+}
+#activeitem .anum {
+  font-size: 26px;
+  font-weight: bold;
+  line-height: 1;
+  color: #e8e8f0;
+  min-width: 18px;
+  text-align: center;
+}
+#activeitem .abody { line-height: 1.35; }
+#activeitem .aeff { display: flex; align-items: center; gap: 5px; color: #c8c8d8; }
+#activeitem .adot { width: 8px; height: 8px; display: inline-block; }
+#activeitem .aname { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#activeitem .adur { color: #7bd88f; font-size: 11px; }
+/* Narrow portrait: the top-left HUD and the top-right item box collide, so drop
+   the item box — the HUD already lists every weapon slot with the active one
+   marked, making it redundant on small screens. */
+@media (max-width: 540px) and (orientation: portrait) {
+  #activeitem { display: none; }
+}
+#activeitem .none { color: #7a7a90; font-style: italic; }
+
+#hint {
+  position: absolute;
+  bottom: 6px;
+  left: 8px;
+  font-size: 11px;
+  color: #8a8aa0;
+  text-shadow: 1px 1px 0 #000;
+  pointer-events: none;
+}
+
+#inventory {
+  position: absolute;
+  z-index: 8; /* above the touch joystick pad (1) so it's usable on mobile */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 320px;
+  max-width: 92vw;
+  max-height: 82vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: rgba(10, 10, 20, 0.94);
+  border: 2px solid #4a4a70;
+  padding: 14px 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  box-shadow: 0 0 0 2px #0a0a12, 0 0 24px #000;
+}
+/* Keep the header/hint visible while the item list scrolls under them. */
+#inventory h2 { position: sticky; top: -14px; background: rgba(10, 10, 20, 0.98); padding-top: 4px; z-index: 1; }
+#inventory .hintline { position: sticky; bottom: -14px; background: rgba(10, 10, 20, 0.98); padding-bottom: 2px; }
+
+#inventory h2 { font-size: 15px; margin-bottom: 8px; color: #ffd86b; }
+#inventory .ifilter { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+#inventory .fbtn {
+  font-family: inherit;
+  font-size: 12px;
+  padding: 3px 8px;
+  cursor: pointer;
+  border: 1px solid #4a4a70;
+  background: #1a1a2c;
+  color: #c8c8d8;
+}
+#inventory .fbtn:hover { background: #2a2a48; }
+#inventory .fbtn.on { border-color: #ffd86b; color: #ffd86b; background: #2a2410; }
+#inventory .fbtn.off { opacity: 0.4; }
+#inventory .ifempty { color: #7a7a90; font-style: italic; padding: 4px; }
+#inventory .row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 1px 4px;
+}
+#inventory .row:hover { background: #2a2a48; }
+/* Offering-shrine mode: clickable rows that toggle a sacrifice selection. */
+#inventory .srow { cursor: pointer; padding-left: 2px; border-left: 2px solid transparent; }
+#inventory .srow.sel { background: rgba(127, 208, 255, 0.14); border-left-color: #7fd0ff; }
+#inventory .srow .mark { color: #7fd0ff; width: 12px; display: inline-block; }
+#inventory .sbtn {
+  font-family: inherit; font-size: 12px; cursor: pointer; padding: 3px 8px;
+  border: 1px solid #4a4a70; background: #16161f; color: #c8c8d8;
+}
+#inventory .sbtn:hover { background: #2a2a48; }
+#inventory .sbtn.offer { border-color: #ff8a3a; color: #ffb060; }
+#inventory .sbtn.offer.off { opacity: 0.4; cursor: default; }
+#inventory h2 .anchor { color: #7fd0ff; }
+
+/* Fishing mini-game pop-up (pauses the world). */
+#fishing {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(4, 6, 12, 0.82);
+}
+#fishing canvas {
+  width: min(92vw, 560px);
+  height: auto;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  border: 2px solid #4a4a70;
+  box-shadow: 0 0 0 2px #0a0a12;
+}
+#fishing .fhint { color: #c8d4e8; font-size: 14px; text-shadow: 1px 1px 0 #000; text-align: center; }
+
+/* Rune vault puzzle: a translucent panel — the world keeps running behind it. */
+#vault {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 8, 16, 0.32); /* light: you can still see monsters coming */
+  pointer-events: none;
+}
+#vault .vpanel {
+  pointer-events: auto;
+  background: rgba(16, 14, 30, 0.9);
+  border: 2px solid #6a5a9a;
+  box-shadow: 0 0 0 2px #0a0a12, 0 0 24px rgba(150, 120, 224, 0.35);
+  padding: 14px 18px;
+  text-align: center;
+  /* Fixed size so the panel never resizes between the show and input phases. */
+  width: min(90vw, 264px);
+  box-sizing: border-box;
+}
+#vault .vtitle { color: #c9b6ff; font-size: 18px; margin-bottom: 2px; }
+#vault .vprog { color: #9a9ab0; font-size: 12px; margin-bottom: 10px; }
+#vault .vgrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 10px;
+}
+#vault .vrune {
+  width: 64px; height: 64px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 30px; cursor: pointer; user-select: none;
+  border: 2px solid #3a3450; background: #191428; border-radius: 6px;
+  transition: background 90ms, box-shadow 90ms, transform 90ms;
+}
+#vault .vrune:hover { border-color: #6a5a9a; }
+#vault .vrune.lit {
+  background: var(--lit); color: #10101a !important;
+  box-shadow: 0 0 14px var(--lit); transform: scale(1.06);
+}
+/* Reserve two lines so a longer input-phase prompt can't grow the panel. */
+#vault .vhint {
+  color: #c8d4e8; font-size: 13px; line-height: 16px;
+  height: 32px; display: flex; align-items: center; justify-content: center;
+}
+#vault .vleave {
+  margin-top: 10px; padding: 5px 12px; cursor: pointer; font-size: 12px;
+  border: 1px solid #4a4a70; background: #22223a; color: #c8c8d8;
+}
+#vault .vleave:hover { background: #2f2f4e; color: #fff; }
+@media (max-width: 480px) {
+  #vault .vrune { width: 54px; height: 54px; font-size: 26px; }
+}
+#inventory .equip { flex: 1; cursor: pointer; }
+#inventory .equipped { color: #7bd88f; }
+#inventory .drop,
+#inventory .below {
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid #5a2a2a;
+  color: #c05a5a;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 6px;
+}
+#inventory .drop:hover { background: #401818; color: #ff8080; }
+#inventory .below {
+  border-color: #6a4a2a;
+  color: #d0a050;
+  font-weight: bold;
+}
+#inventory .below:hover { background: #402c10; color: #ffcf70; }
+#inventory .hintline { margin-top: 10px; color: #8a8aa0; font-size: 11px; }
+
+#menu {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 6, 12, 0.92);
+  z-index: 10;
+}
+#menu .panel { text-align: center; padding: 20px; }
+#menu h1 {
+  font-size: 44px;
+  letter-spacing: 3px;
+  color: #ffd86b;
+  text-shadow: 3px 3px 0 #000;
+}
+#menu .subtitle { font-size: 16px; color: #8fd0ff; margin: 2px 0 14px; font-style: italic; }
+#menu .tag { color: #c8c8d8; font-size: 13px; margin-bottom: 14px; }
+/* Segmented Players/Settings control that slides the view below it. */
+#menu .mtabs { display: flex; gap: 6px; justify-content: center; margin: 0 auto 14px; width: min(300px, 80vw); }
+#menu .mtab {
+  flex: 1; padding: 8px 0; font-family: inherit; font-size: 13px; cursor: pointer;
+  border: 1px solid #4a4a70; background: #14141f; color: #9a9ab0;
+}
+#menu .mtab.active { background: #2a2a48; color: #ffd86b; border-color: #6a6a9a; }
+#menu .views { overflow: hidden; width: min(600px, 92vw); margin: 0 auto; transition: height 0.28s ease; }
+#menu .track { display: flex; align-items: flex-start; transition: transform 0.28s ease; }
+#menu .view { flex: 0 0 100%; box-sizing: border-box; padding: 0 2px; }
+#menu .slots { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+#menu .slot {
+  width: 130px;
+  border: 2px solid #4a4a70;
+  background: #12121e;
+  padding: 12px 10px;
+  box-shadow: 0 0 0 2px #0a0a12;
+}
+#menu .slot.leader { border-color: #ffd86b; box-shadow: 0 0 0 2px #0a0a12, 0 0 16px #7a5a10; }
+#menu .slot.current { border-color: #7bd88f; box-shadow: 0 0 0 2px #0a0a12, 0 0 16px #1e6a34; }
+#menu .slot.current.leader { border-color: #ffd86b; }
+#menu .slotname { font-size: 14px; color: #e8e8f0; margin-bottom: 8px; }
+#menu .slotstat { font-size: 13px; color: #c8c8d8; }
+#menu .slotstat span { color: #8a8aa0; }
+#menu .slotstat b { color: #ffd86b; font-size: 16px; }
+#menu .slotstat.empty { color: #7a7a90; font-style: italic; }
+#menu button {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  border: 1px solid #4a4a70;
+  background: #22223a;
+  color: #e8e8f0;
+}
+#menu button.play { border-color: #3a7d3a; background: #1c3a1c; color: #9be89b; }
+#menu button.play:hover { background: #275027; }
+#menu button.reset { color: #c05a5a; border-color: #5a2a2a; background: transparent; }
+#menu button.reset:hover:not([disabled]) { background: #401818; color: #ff8080; }
+#menu button.reset[disabled] { opacity: 0.35; cursor: default; }
+#menu .sound {
+  margin: 16px auto 0;
+  max-width: 340px;
+  border: 1px solid #2a2a48;
+  padding: 10px 14px;
+}
+#menu .sound .srow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0;
+}
+#menu .sound .srow span { width: 74px; text-align: right; color: #c8c8d8; font-size: 13px; }
+#menu .sound .vol { flex: 1; accent-color: #ffd86b; cursor: pointer; }
+#menu .sound .stest {
+  width: 30px; padding: 4px 0; margin: 0;
+  border: 1px solid #3a7d3a; background: #1c3a1c; color: #9be89b; cursor: pointer;
+}
+#menu .sound .stest:hover { background: #275027; }
+#menu .sound .mute {
+  width: 100%; margin-top: 8px; padding: 7px; cursor: pointer;
+  border: 1px solid #3a7d3a; background: #16281a; color: #9be89b;
+}
+#menu .sound .mute.muted { border-color: #7a2a2a; background: #2a1414; color: #ff9090; }
+#menu .sound .hudtoggle {
+  width: 100%; margin-top: 8px; padding: 7px; cursor: pointer;
+  border: 1px solid #4a4a70; background: #22223a; color: #c8c8d8;
+}
+#menu .sound .hudtoggle:hover { background: #2f2f4e; color: #fff; }
+
+/* Controls / key remapping. */
+#menu .controls {
+  margin: 12px auto 0;
+  max-width: 340px;
+  border: 1px solid #2a2a48;
+  padding: 10px 14px;
+}
+#menu .controls .ctitle { color: #ffd86b; font-size: 13px; text-align: center; margin-bottom: 8px; }
+#menu .controls .keylist { display: flex; flex-direction: column; gap: 4px; }
+#menu .controls .crow { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+#menu .controls .crow span { color: #c8c8d8; font-size: 13px; }
+#menu .controls .crow span { flex: 1; }
+#menu .controls .keybtn {
+  width: 84px; flex: none; padding: 4px 0; cursor: pointer;
+  border: 1px solid #4a4a70; background: #22223a; color: #e8e8f0;
+  font-family: inherit; font-size: 13px; text-align: center;
+}
+#menu .controls .keybtn:hover { background: #2f2f4e; }
+#menu .controls .keybtn.listening { border-color: #ffd86b; background: #3a3520; color: #ffd86b; font-size: 10px; }
+#menu .controls .cnote { color: #8a8aa0; font-size: 12px; margin: 8px 0 0; }
+#menu .controls .ckreset {
+  width: 100%; margin-top: 8px; padding: 6px; cursor: pointer;
+  border: 1px solid #4a4a70; background: #22223a; color: #c8c8d8; font-size: 12px;
+}
+#menu .controls .ckreset:hover { background: #2f2f4e; color: #fff; }
+/* Keyboard-aim mode selector */
+#menu .controls .aimmode { margin-bottom: 10px; }
+#menu .controls .aimseg { display: flex; gap: 4px; }
+#menu .controls .aimopt {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 6px 4px; cursor: pointer; border: 1px solid #4a4a70; background: #22223a;
+  color: #c8c8d8; border-radius: 3px;
+}
+#menu .controls .aimopt:hover { background: #2f2f4e; }
+#menu .controls .aimopt.on { border-color: #ffd86b; background: #3a3520; color: #ffd86b; }
+#menu .controls .aimopt b { font-size: 12px; }
+#menu .controls .aimopt span { font-size: 10px; color: #8a8aa0; }
+#menu .controls .aimopt.on span { color: #d8c98b; }
+
+/* Key badges in the on-screen hint line. */
+#hint .k {
+  color: #ffd86b; font-weight: bold;
+  padding: 0 2px; border: 1px solid #3a3a5a; border-radius: 2px;
+}
+
+/* Touch mute button reflects state. */
+.tbtn.mute.muted { border-color: #7a2a2a; background: rgba(50, 16, 16, 0.8); color: #ff9090; }
+
+#menu .hintline { margin-top: 18px; color: #8a8aa0; font-size: 12px; }
+
+/* Short screens (phones in landscape, small portrait): shrink the header and
+   let the panel scroll rather than clip, so the title always stays reachable. */
+@media (max-height: 620px) {
+  #menu { align-items: flex-start; overflow-y: auto; }
+  #menu .panel { padding: 12px 16px; }
+  #menu h1 { font-size: 32px; }
+  #menu .subtitle { font-size: 13px; margin: 2px 0 8px; }
+  #menu .tag { margin-bottom: 10px; }
+  #menu .mtabs { margin-bottom: 10px; }
+  #menu .hintline { margin-top: 12px; }
+}
+
+#celebrate {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  text-align: center;
+  background: rgba(10, 6, 24, 0.82);
+  border: 2px solid #ffd86b;
+  box-shadow: 0 0 24px #a8791c, 0 0 0 2px #0a0a12;
+  padding: 12px 22px;
+  pointer-events: none;
+  animation: pop 0.5s ease-out;
+}
+#celebrate h1 {
+  font-size: 26px;
+  color: #ffd86b;
+  letter-spacing: 2px;
+  text-shadow: 2px 2px 0 #000;
+  margin-bottom: 2px;
+}
+#celebrate .sub { color: #8fd0ff; font-size: 13px; margin-bottom: 10px; }
+#celebrate .stats {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 2px 18px;
+  font-size: 13px;
+  justify-content: center;
+}
+#celebrate .stats span { color: #9a9ab0; text-align: right; }
+#celebrate .stats b { color: #fff; text-align: left; }
+#celebrate .count { margin-top: 10px; color: #ff9e9e; font-size: 12px; }
+@keyframes pop { from { transform: translateX(-50%) scale(0.6); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
+/* Flex-centered panels (no translate) — used by the confirm dialog. */
+@keyframes popc { from { transform: scale(0.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* --- help / how-to-play overlay --- */
+#help {
+  position: absolute;
+  inset: 0;
+  z-index: 11;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 6, 12, 0.9);
+  padding: 16px;
+}
+#help .hpanel {
+  width: 640px;
+  max-width: 94vw;
+  max-height: 88vh;
+  overflow-y: auto;
+  background: #12121e;
+  border: 2px solid #4a4a70;
+  box-shadow: 0 0 0 2px #0a0a12, 0 0 26px #000;
+  padding: 18px 22px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #c8c8d8;
+}
+#help h1 { color: #ffd86b; font-size: 22px; letter-spacing: 2px; margin-bottom: 2px; }
+#help .hsub { color: #8fd0ff; font-style: italic; margin-bottom: 14px; }
+#help h2 { color: #ffd86b; font-size: 15px; margin: 16px 0 6px; border-bottom: 1px solid #2a2a48; padding-bottom: 3px; }
+#help table { width: 100%; border-collapse: collapse; }
+#help td { padding: 3px 6px; vertical-align: top; }
+#help td:first-child { color: #e8e8f0; white-space: nowrap; font-weight: bold; width: 92px; }
+#help tr:nth-child(even) { background: rgba(255, 255, 255, 0.03); }
+#help .k { color: #ffd86b; font-weight: bold; }
+#help .close {
+  display: block;
+  margin: 18px auto 2px;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 8px 26px;
+  cursor: pointer;
+  border: 1px solid #3a7d3a;
+  background: #1c3a1c;
+  color: #9be89b;
+}
+#help .close:hover { background: #275027; }
+#menu button.help {
+  width: auto;
+  margin: 14px auto 0;
+  padding: 6px 16px;
+  border-color: #4a4a70;
+  background: #22223a;
+  color: #c8c8d8;
+}
+#menu button.help:hover { background: #2f2f4e; color: #fff; }
+
+/* --- themed confirm dialog --- */
+#confirm {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 6, 12, 0.72);
+}
+#confirm .cpanel {
+  min-width: 300px;
+  max-width: 90vw;
+  background: #12121e;
+  border: 2px solid #c05a5a;
+  box-shadow: 0 0 0 2px #0a0a12, 0 0 26px #000;
+  padding: 18px 20px;
+  text-align: center;
+  animation: popc 0.18s ease-out;
+}
+#confirm h2 { font-size: 17px; color: #ff8080; margin-bottom: 8px; }
+#confirm p { font-size: 13px; color: #c8c8d8; margin-bottom: 16px; line-height: 1.4; }
+#confirm .cbtns { display: flex; gap: 12px; justify-content: center; }
+#confirm button {
+  font-family: inherit;
+  font-size: 14px;
+  padding: 8px 18px;
+  cursor: pointer;
+  border: 1px solid #4a4a70;
+  background: #22223a;
+  color: #e8e8f0;
+}
+#confirm button.cancel:hover { background: #2f2f4e; }
+#confirm button.danger { border-color: #7a2a2a; background: #401818; color: #ff8080; }
+#confirm button.danger:hover { background: #5a1e1e; color: #ffb0b0; }
+
+/* --- touch controls (phones/tablets) --- */
+body.touch #hint { display: none; }
+/* Inventory spans above the on-screen buttons so it and the slot buttons work
+   together, and the joysticks are disabled while it's open so touches scroll it. */
+body.touch #inventory {
+  top: 6px;
+  bottom: 118px;
+  transform: translateX(-50%);
+  max-height: none;
+  height: auto;
+}
+body.touch.inv-open #touchpad { display: none; }
+#touchpad {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  touch-action: none;
+  background: transparent;
+}
+.tknob {
+  position: fixed;
+  z-index: 2;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+.tknob::before { /* base ring */
+  content: "";
+  position: absolute;
+  left: -46px; top: -46px;
+  width: 92px; height: 92px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.05);
+}
+.tknob::after { /* thumb */
+  content: "";
+  position: absolute;
+  left: calc(-18px + var(--kx, 0px));
+  top: calc(-18px + var(--ky, 0px));
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+}
+.tknob.aim::after { background: rgba(255, 210, 100, 0.5); }
+
+.tbtn {
+  position: fixed;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  color: #e8e8f0;
+  background: rgba(20, 20, 34, 0.72);
+  border: 2px solid #4a4a70;
+  border-radius: 8px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.tslots {
+  position: fixed;
+  z-index: 9;
+  left: 50%;
+  bottom: var(--btm, 12px);
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+}
+.tslots .slot { position: static; width: 46px; height: 46px; font-size: 18px; font-weight: bold; }
+/* Bottom-anchored controls sit above the browser chrome (URL bar) and any
+   device safe-area. --kb is the layout/visual viewport gap, set from JS. */
+.tbtn.inv { right: 12px; bottom: var(--btm2, 66px); width: 58px; height: 40px; font-size: 13px; }
+.tbtn.hud { right: 12px; bottom: var(--btm, 12px); width: 58px; height: 40px; font-size: 13px; }
+.tbtn.hud.on { border-color: #8fd0ff; color: #8fd0ff; background: rgba(16, 30, 50, 0.82); }
+.tbtn.menu { left: 12px; bottom: var(--btm2, 66px); width: 58px; height: 40px; font-size: 13px; }
+.tbtn.mute { left: 12px; bottom: var(--btm, 12px); width: 58px; height: 40px; font-size: 13px; }
+:root {
+  --btm: calc(12px + var(--kb, 0px) + env(safe-area-inset-bottom, 0px));
+  --btm2: calc(66px + var(--kb, 0px) + env(safe-area-inset-bottom, 0px));
+}
+body:not(.touch) #touchpad, body:not(.touch) .tknob, body:not(.touch) .tbtn, body:not(.touch) .tslots { display: none; }
+
+.hidden { display: none !important; }

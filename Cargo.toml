@@ -1,0 +1,22 @@
+[package]
+name = "webwander"
+version = "1.0.0"
+edition = "2021"
+
+[lib]
+# cdylib emits the raw .wasm module with our #[no_mangle] exports; rlib lets
+# `cargo test` build the host unit tests and the native `economy` simulator bin.
+crate-type = ["cdylib", "rlib"]
+path = "game/lib.rs"
+
+# Headless progression simulator (native host build). Not part of the wasm game.
+[[bin]]
+name = "economy"
+path = "game/economy.rs"
+
+[profile.release]
+opt-level = "z"   # optimize for size
+lto = true
+panic = "abort"
+codegen-units = 1
+strip = true
