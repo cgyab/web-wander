@@ -15,7 +15,7 @@
     "sim": "cargo run --release --bin economy --"
   },
   "devDependencies": {
-    "puppeteer-core": "^25.9.0",
+    "puppeteer-core": "^25.11.0",
     "typescript": "^7.0.2",
     "vite": "^6.4.3"
   }
