@@ -29,8 +29,25 @@ function hardenTouchGestures() {
   document.addEventListener("contextmenu", stop);
 }
 
+// Ask the browser to make our localStorage PERSISTENT (exempt from eviction).
+// Saves live in localStorage, which is "best-effort" by default: the browser can
+// evict it under storage pressure, and Safari/WebKit clears script-writable
+// storage after ~7 days without a visit — which looks like "my save vanished".
+// persist() flips the origin to durable storage; it's granted silently for
+// installed PWAs / engaged sites and is a harmless no-op where unsupported. Some
+// browsers only grant after a user gesture, so we also call this from the first
+// slot choice. Best-effort and fully guarded — never blocks startup.
+async function requestPersistentStorage(): Promise<void> {
+  try {
+    if (!navigator.storage?.persist) return;
+    if (await navigator.storage.persisted()) return; // already durable
+    await navigator.storage.persist();
+  } catch { /* unsupported / blocked: saves still work, just evictable */ }
+}
+
 async function main() {
   hardenTouchGestures();
+  void requestPersistentStorage();
   const canvas = document.getElementById("screen") as HTMLCanvasElement;
   const menuEl = document.getElementById("menu")!;
   const wasm = await loadWasm();
@@ -157,6 +174,7 @@ async function main() {
   }
 
   function chooseSlot(slot: number) {
+    void requestPersistentStorage(); // this click is a gesture some browsers need to grant durability
     persist(); // save whoever was playing before we swap
     activeSlot = slot;
     lastSlot = slot;
