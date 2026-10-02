@@ -2165,6 +2165,18 @@ impl Game {
             let w = &mut self.player.inv[i];
             w.durability = (w.durability - 0.10).max(0.0);
         }
+        // Note the (base, class) of any weapon that just broke in each slot, so we
+        // can auto-draw a same-type spare from the bag into that slot after reaping.
+        let mut broke_slot_type: [Option<(u8, u8)>; 4] = [None; 4];
+        for s in 0..4 {
+            let e = self.player.equip[s];
+            if e >= 0 {
+                let w = &self.player.inv[e as usize];
+                if w.durability <= 0.0 {
+                    broke_slot_type[s] = Some((w.base, w.class_skill));
+                }
+            }
+        }
         // Reap broken weapons (durability 0) and remap equip references.
         let mut broke: Vec<String> = Vec::new();
         let mut remap = vec![-1i32; self.player.inv.len()];
@@ -2181,6 +2193,39 @@ impl Game {
         for s in 0..4 {
             let e = self.player.equip[s];
             self.player.equip[s] = if e >= 0 { remap[e as usize] } else { -1 };
+        }
+
+        // QoL: when an equipped weapon breaks, auto-draw the best same-type spare
+        // from the bag into its slot — so dying in a tight spot doesn't force a
+        // detour into the inventory screen to re-arm. Prefer the exact same base
+        // weapon, then the same class (skill), ranked by dps; skip any spare
+        // already equipped in a surviving slot so a weapon isn't double-drawn.
+        for s in 0..4 {
+            let (base, class) = match broke_slot_type[s] {
+                Some(t) => t,
+                None => continue,
+            };
+            if self.player.equip[s] >= 0 {
+                continue; // slot already holds a weapon
+            }
+            let equipped = self.player.equip;
+            let pick = self
+                .player
+                .inv
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| !equipped.contains(&(*i as i32)))
+                .filter(|(_, w)| w.base == base || w.class_skill == class)
+                .max_by(|(_, a), (_, b)| {
+                    let key = |w: &Weapon| ((w.base == base) as u8, w.damage / w.cooldown.max(0.01));
+                    let (ab, ad) = key(a);
+                    let (bb, bd) = key(b);
+                    ab.cmp(&bb).then(ad.partial_cmp(&bd).unwrap_or(std::cmp::Ordering::Equal))
+                })
+                .map(|(i, _)| i as i32);
+            if let Some(idx) = pick {
+                self.player.equip[s] = idx;
+            }
         }
 
         // Respawn at the furthest banked checkpoint (origin if none).
@@ -2201,9 +2246,34 @@ impl Game {
             }
         }
 
-        // Safety net: if every weapon broke and the pack is empty, a basic blade
-        // (scaled to where you respawn) answers your need so you're never stranded
-        // unable to fight.
+        // Keep a weapon in hand after a break without a trip to the bag, in order:
+        //  1) the same-type refill above drew spares into any broken slots;
+        //  2) if the active slot is still empty, equip the best unused bag weapon,
+        //     or failing that make active whichever slot still holds a weapon;
+        //  3) if the pack is truly empty, grant a basic blade (scaled to respawn).
+        let active = self.player.slot.min(3);
+        if self.player.equip[active] < 0 && !self.player.inv.is_empty() {
+            let equipped = self.player.equip;
+            let best = self
+                .player
+                .inv
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| !equipped.contains(&(*i as i32)))
+                .max_by(|(_, a), (_, b)| {
+                    (a.damage / a.cooldown.max(0.01))
+                        .partial_cmp(&(b.damage / b.cooldown.max(0.01)))
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .map(|(i, _)| i as i32);
+            if let Some(idx) = best {
+                self.player.equip[active] = idx;
+            } else if let Some(s) = (0..4).find(|&s| self.player.equip[s] >= 0) {
+                self.player.slot = s; // a surviving weapon sits in another slot — wield it
+            }
+        }
+        // Safety net: if every weapon broke and the pack is now empty, a basic
+        // blade answers your need so you're never stranded unable to fight.
         let refitted = self.player.inv.is_empty();
         if refitted {
             let power = difficulty_at(self.player.x, self.player.y) as f32;
@@ -4151,6 +4221,49 @@ mod tests {
         assert_eq!(g.player.inv[0].base, 0, "the refit is a basic sword");
         assert!(g.player.weapon().is_some(), "an equipped weapon again");
         assert!(g.player.inv.iter().all(|w| w.name != "Test Bow"), "the broken bow is gone");
+    }
+
+    /// When an equipped weapon breaks on death, the slot auto-draws the best
+    /// same-TYPE spare from the bag (so you're not forced into the inventory to
+    /// re-arm), leaving off-type weapons alone. The empty-bag grant still covers
+    /// "nothing left".
+    #[test]
+    fn a_broken_weapon_auto_draws_a_same_type_spare() {
+        let mut g = Game::new(7);
+        g.player.inv.clear();
+        g.player.equip = [-1; 4];
+        // Wielding a nearly-broken bow; a stronger spare bow and a sword wait in the bag.
+        let mut worn = test_bow();
+        worn.durability = 0.05; // one death (-10%) shatters it
+        worn.name = "Worn Bow".into();
+        let mut spare = test_bow();
+        spare.name = "Spare Bow".into();
+        spare.damage = 40.0; // clearly higher dps than any decoy bow
+        let mut weak = test_bow();
+        weak.name = "Weak Bow".into();
+        weak.damage = 6.0;
+        let mut sword = test_bow();
+        sword.base = 0;
+        sword.class_skill = SK_SWORD;
+        sword.ranged = false;
+        sword.damage = 99.0; // higher dps, but WRONG type — must be ignored
+        sword.name = "Sword".into();
+        g.player.inv.push(worn);  // 0 (equipped)
+        g.player.inv.push(weak);  // 1
+        g.player.inv.push(spare); // 2
+        g.player.inv.push(sword); // 3
+        g.player.equip[0] = 0;
+        g.player.slot = 0;
+
+        g.player.hp = -1.0;
+        g.respawn_if_dead();
+
+        let w = g.player.weapon().expect("armed after the break");
+        assert_eq!(w.base, 4, "drew a same-type (bow) spare, not the higher-dps sword");
+        assert_eq!(w.name, "Spare Bow", "drew the highest-dps same-type spare");
+        assert!(g.player.inv.iter().all(|x| x.name != "Worn Bow"), "the broken bow was reaped");
+        assert!(g.player.inv.iter().any(|x| x.name == "Sword"), "the off-type sword stayed in the bag");
+        assert_eq!(g.player.inv.len(), 3, "no basic blade granted while the bag had a spare");
     }
 
     /// Enemy projectiles always travel faster than the enemy that fired them,
