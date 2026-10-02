@@ -1193,6 +1193,33 @@ try {
   const slot0After = await mp.$eval('#menu .play[data-slot="0"]', (el) => el.textContent).catch(() => "");
   ok("reset clears a slot", /New game/.test(slot0After), slot0After);
 
+  // ---- Offline support (service worker) ----
+  // The app skips SW registration under automation (navigator.webdriver), so
+  // register it by hand, let it cache the shell on an online reload, then cut the
+  // network and confirm the whole app (JS bundle + game.wasm) still boots.
+  const off = await browser.newPage();
+  await off.setViewport({ width: 960, height: 540 });
+  await off.goto(`${BASE}/?seed=42`, { waitUntil: "networkidle0" });
+  await waitSnap(off); // online boot works
+  await off.evaluate(async () => {
+    await navigator.serviceWorker.register("./sw.js");
+    await navigator.serviceWorker.ready;
+  });
+  await sleep(300);
+  await off.reload({ waitUntil: "networkidle0" }); // SW now controls + caches every asset this pass
+  await waitSnap(off);
+  await sleep(400); // let runtime caching settle
+  await off.setOfflineMode(true);
+  await off.reload({ waitUntil: "domcontentloaded" }).catch(() => {});
+  let offlineOk = false;
+  try { await waitSnap(off); offlineOk = true; } catch { /* stayed broken offline */ }
+  ok("installed app boots offline (service worker serves shell + wasm)", offlineOk);
+  await off.setOfflineMode(false);
+  await off.evaluate(async () => {
+    for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
+  }).catch(() => {});
+  await off.close();
+
   console.log(`\nscreenshot: /tmp/webwander.png`);
   const failed = results.filter((r) => !r.pass);
   console.log(`\n${results.length - failed.length}/${results.length} checks passed`);

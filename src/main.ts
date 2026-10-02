@@ -45,8 +45,21 @@ async function requestPersistentStorage(): Promise<void> {
   } catch { /* unsupported / blocked: saves still work, just evictable */ }
 }
 
+// Register the offline service worker (public/sw.js). Only in the built app
+// (`import.meta.env.PROD`) so it never fights Vite's dev HMR, and not under
+// automation (puppeteer sets navigator.webdriver) so it can't add caching
+// nondeterminism to the e2e. Harmless/no-op where Service Workers are absent.
+function registerServiceWorker(): void {
+  const prod = (import.meta as unknown as { env?: { PROD?: boolean } }).env?.PROD;
+  if (!prod || navigator.webdriver || !("serviceWorker" in navigator)) return;
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(() => { /* offline support just won't be available */ });
+  });
+}
+
 async function main() {
   hardenTouchGestures();
+  registerServiceWorker();
   void requestPersistentStorage();
   const canvas = document.getElementById("screen") as HTMLCanvasElement;
   const menuEl = document.getElementById("menu")!;
