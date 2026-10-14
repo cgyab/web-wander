@@ -361,7 +361,9 @@ html, body {
 /* Three short columns (Move / Weapons / Actions) so the panel stays within a
    small laptop's height instead of one tall scrolling-off list. */
 #menu .controls .keygrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 14px; }
-#menu .controls .keycol { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+#menu .controls .keygrid.cols2 { grid-template-columns: repeat(2, 1fr); max-width: 380px; margin: 0 auto; }
+#menu .controls .keycol { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+#menu .controls .keygroup { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 #menu .controls .ckhead {
   color: #9a9ab0; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em;
   text-align: left; margin-bottom: 2px;

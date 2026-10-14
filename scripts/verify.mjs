@@ -965,6 +965,13 @@ try {
   ok("aim-cluster mode adds aim rows and relocates the Bag off i",
     ["aimup", "aimleft", "aimdown", "aimright"].every((a) => m2.rows.includes(a)) && m2.bag === "B" && m2.aimup === "I",
     JSON.stringify(m2));
+  // Aim-cluster mode drops to a balanced 2-column layout: Move+Aim | Weapons+Actions.
+  const m2cols = await kb.evaluate(() => {
+    const cols = Array.from(document.querySelectorAll("#menu .controls .keycol"));
+    return { cols: cols.length, col0: cols[0]?.querySelectorAll(".crow").length, col1: cols[1]?.querySelectorAll(".crow").length };
+  });
+  ok("aim-cluster mode uses 2 balanced columns (Move+Aim | Weapons+Actions)",
+    m2cols.cols === 2 && m2cols.col0 === 8 && m2cols.col1 === 7, JSON.stringify(m2cols));
 
   // A reserved key (M = mute) is refused on rebind — no silent double-map.
   await kb.evaluate(() => document.querySelector('#menu .keybtn[data-action="inventory"]').click());
