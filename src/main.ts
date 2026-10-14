@@ -269,11 +269,24 @@ async function main() {
       html += seg(1, "Move-aim", "shoot where you move");
       html += seg(2, "Aim keys", "IJKL aim + fire");
       html += `</div></div>`;
-      html += `<div class="keylist">`;
-      for (const { action, label } of remapList(am)) {
-        html += `<div class="crow"><span>${label}</span><button class="keybtn" data-action="${action}">${keyLabel(keybinds.get(action))}</button></div>`;
-      }
-      html += `</div>`; // .keylist
+      // Three columns to keep the panel short on small laptop displays: Move
+      // directions, Weapon slots, and everything else (pack/fish/hud + the aim
+      // keys or fire key for the active aim mode).
+      const rows = remapList(am);
+      const MOVE = new Set<Action>(["up", "left", "down", "right"]);
+      const WEAPON = new Set<Action>(["slot1", "slot2", "slot3", "slot4"]);
+      const keyCol = (title: string, keep: (a: Action) => boolean) => {
+        let h = `<div class="keycol"><div class="ckhead">${title}</div>`;
+        for (const { action, label } of rows.filter((r) => keep(r.action))) {
+          h += `<div class="crow"><span>${label}</span><button class="keybtn" data-action="${action}">${keyLabel(keybinds.get(action))}</button></div>`;
+        }
+        return h + `</div>`;
+      };
+      html += `<div class="keygrid">`;
+      html += keyCol("Move", (a) => MOVE.has(a));
+      html += keyCol("Weapons", (a) => WEAPON.has(a));
+      html += keyCol("Actions", (a) => !MOVE.has(a) && !WEAPON.has(a));
+      html += `</div>`; // .keygrid
       html += `<p class="cnote">Click a key, then press the new one. Movement also works with the arrow keys. (M mute and Esc menu are fixed.)</p>`;
       html += `<button class="ckreset">Reset to defaults</button>`;
     }

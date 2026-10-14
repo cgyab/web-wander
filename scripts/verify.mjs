@@ -909,6 +909,16 @@ try {
   ok("Settings lists the remappable keys",
     ["up", "left", "down", "right", "slot1", "slot2", "slot3", "slot4", "inventory", "fish", "hud"]
       .every((a) => kbRows.includes(a)), kbRows.join(","));
+  // Controls are a compact 3-column grid (Move / Weapons / Actions) and the menu
+  // can scroll, so the panel can't cut off the tabs on a short laptop display.
+  const ctrlLayout = await kb.evaluate(() => {
+    const cols = Array.from(document.querySelectorAll("#menu .controls .keycol"));
+    const rowsIn = (i) => cols[i] ? cols[i].querySelectorAll(".crow").length : -1;
+    return { cols: cols.length, move: rowsIn(0), weapons: rowsIn(1), menuOverflowY: getComputedStyle(document.getElementById("menu")).overflowY };
+  });
+  ok("Settings controls are a 3-column grid and the menu scrolls",
+    ctrlLayout.cols === 3 && ctrlLayout.move === 4 && ctrlLayout.weapons === 4 && ctrlLayout.menuOverflowY === "auto",
+    JSON.stringify(ctrlLayout));
   // Rebind Move-up (W) to T, then confirm the label, storage, and live hint.
   await kb.evaluate(() => document.querySelector('#menu .keybtn[data-action="up"]').click());
   await sleep(100);
